@@ -6,11 +6,10 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
-	"strings"
 )
 
 var (
-	pluginName        = "krakend-common-middleware"
+	pluginName        = "krakend-validator-bypass"
 	HandlerRegisterer = registerer(pluginName)
 )
 
@@ -28,36 +27,35 @@ func (r registerer) registerHandlers(_ context.Context, extra map[string]interfa
 	// If the plugin requires some configuration, it should be under the name of the plugin.
 	cfg, ok := extra[pluginName].(map[string]interface{})
 	if !ok {
-		return h, errors.New("configuration not found for common middleware")
+		return h, errors.New("configuration not found for validator bypass")
 	}
 
 	// Extract exceptions list from configuration
-	logger.Info("Extracting exception list...")
 	exceptions, _ := cfg["exceptions"].([]interface{})
 	var exceptionPatterns []string
 	for _, url := range exceptions {
 		// Convert to string and create regex pattern
 		exception := url.(string)
-		regexPattern := convertWildcardToRegex(exception)
+		regexPattern := convertToRegex(exception)
 		exceptionPatterns = append(exceptionPatterns, regexPattern)
 	}
 	logger.Debug("Configured exceptionPatterns:", exceptionPatterns)
 
-	logger.Debug("Validation-bypass middleware registered")
+	logger.Debug("Validator Bypass Middleware registered")
 	return middleware(h, exceptionPatterns), nil
 }
 
-// Convert wildcard pattern to regex
-func convertWildcardToRegex(path string) string {
-	// Replace '*' with '.*' to match any value
-	path = strings.ReplaceAll(path, "*", ".*")
+// Convert path pattern with {var} to regex
+func convertToRegex(path string) string {
+	// Replace placeholders like {var} with regex to match any value except '/'
+	path = regexp.MustCompile(`\{[^}]+\}`).ReplaceAllString(path, "[^/]+")
 	return "^" + path + "$"
 }
 
 // Middleware function to mark requests for bypass if they match an exception pattern
 func middleware(next http.Handler, exceptionPatterns []string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		logger.Info(fmt.Sprintf("[PLUGIN: %s] Common Middleware executing..", HandlerRegisterer))
+		logger.Info(fmt.Sprintf("[PLUGIN: %s] Middleware executing..", HandlerRegisterer))
 
 		// Check if the request URL matches any of the exception patterns
 		for _, pattern := range exceptionPatterns {
@@ -66,7 +64,7 @@ func middleware(next http.Handler, exceptionPatterns []string) http.Handler {
 				// Add a bypass flag to the request context
 				ctx := context.WithValue(r.Context(), "bypassValidation", true)
 				r = r.WithContext(ctx)
-				logger.Info("[PLUGIN: Common Middleware] Request bypassed due to matching exception pattern")
+				logger.Info("[PLUGIN: Validator Bypass] Request bypassed due to matching exception pattern")
 				next.ServeHTTP(w, r)
 				return
 			}

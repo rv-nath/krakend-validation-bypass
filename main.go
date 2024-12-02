@@ -57,6 +57,9 @@ func middleware(next http.Handler, exceptionPatterns []string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		logger.Info(fmt.Sprintf("[PLUGIN: %s] Middleware executing..", HandlerRegisterer))
 
+		// Log the request URL
+		logger.Info(fmt.Sprintf("[PLUGIN: %s] Incoming request URL: %s", HandlerRegisterer, r.URL.Path))
+
 		// Check if the request URL matches any of the exception patterns
 		for _, pattern := range exceptionPatterns {
 			matched, _ := regexp.MatchString(pattern, r.URL.Path)
@@ -64,7 +67,7 @@ func middleware(next http.Handler, exceptionPatterns []string) http.Handler {
 				// Add a bypass flag to the request context
 				ctx := context.WithValue(r.Context(), "bypassValidation", true)
 				r = r.WithContext(ctx)
-				logger.Info("[PLUGIN: Validator Bypass] Request bypassed due to matching exception pattern")
+				logger.Info(fmt.Sprintf("[PLUGIN: %s] Bypassing the request due to matching exception pattern.", HandlerRegisterer))
 				next.ServeHTTP(w, r)
 				return
 			}
